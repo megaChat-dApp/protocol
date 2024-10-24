@@ -18,8 +18,6 @@ bytes32 constant NEXT_SENDER_LIST_ID = keccak256("nextSender");
 
 using LinkedListInterface for LinkedList;
 
-error MessageNotFound();
-
 library UserMailboxInterface {
     function writeMessage(UserMailbox storage self, Message memory _msg, address sender) public {
         bytes32 messageId = keccak256(abi.encode(_msg));
@@ -49,12 +47,9 @@ library UserMailboxInterface {
         return (valHash, self.messages[valHash]);
     }
 
-    function getMessage(UserMailbox storage self, bytes32 msgId) internal view returns (Message storage) {
+    function getMessage(UserMailbox storage self, bytes32 msgId) internal view returns (bool exists, Message storage) {
         Message storage _msg = self.messages[msgId];
-        if(_msg.sentAt == 0) {
-            revert MessageNotFound();
-        }
-        return _msg;
+        return (_msg.sentAt != 0, _msg);
     }
 
     function countMessagesFrom(UserMailbox storage self, address sender) public view returns (uint256) {

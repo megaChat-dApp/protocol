@@ -24,8 +24,14 @@ contract Mailbox {
     /// @param timestamp Time when operation occurred
     event MailboxUpdated(address indexed sender, address indexed recipient, uint messagesCount, uint256 timestamp);
 
-    /// @notice Raised on attemt to write a messages to a full Mailbox
+    /// @notice Raised on attempt to write a message when Mailbox is full
     error MailboxIsFull();
+
+    /// @notice Raised on attempt to read a message when no unread messages left
+    error MailboxIsEmpty();
+
+    /// @notice Raised on failure to find the requested message
+    error MessageNotFound();
 
     using UserMailboxInterface for UserMailbox;
 
@@ -60,17 +66,18 @@ contract Mailbox {
      */
     function writeMessageAnonymous(bytes calldata message, address recipient) external {
         UserMailbox storage mailbox = mailboxes[recipient];
-        uint256 msgCount = mailbox.countMessagesFrom(msg.sender);
+        address anonSender = address(0);
+        uint256 msgCount = mailbox.countMessagesFrom(anonSender);
         if (msgCount == MAX_MESSAGES_PER_MAILBOX) revert MailboxIsFull();
 
         Message memory _msg = Message({
-            sender: address(0),
+            sender: anonSender,
             data: message,
             sentAt: block.timestamp
         });
-        mailbox.writeMessage(_msg, _msg.sender);
+        mailbox.writeMessage(_msg, anonSender);
 
-        emit MailboxUpdated(_msg.sender, recipient, msgCount+1, block.timestamp);
+        emit MailboxUpdated(anonSender, recipient, msgCount+1, block.timestamp);
     }
 
     /**
@@ -85,10 +92,7 @@ contract Mailbox {
         
         UserMailbox storage mailbox = mailboxes[msg.sender];
         uint256 msgCount = mailbox.countMessagesFrom(sender);
-        if (msgCount == 0) {
-            bytes memory zero;
-            return (bytes32(0), zero, 0);
-        }
+        if (msgCount == 0) revert MailboxIsEmpty();
         (bytes32 _msgId, Message memory _msg) = mailbox.readMessageFrom(sender);
         msgId = _msgId;
         data = _msg.data;
@@ -107,10 +111,7 @@ contract Mailbox {
         returns (bytes32 msgId, address sender, bytes memory data, uint256 sentAt) {
         UserMailbox storage mailbox = mailboxes[msg.sender];
         uint256 msgCount = mailbox.countSenders();
-        if (msgCount == 0) {
-            bytes memory zero;
-            return (bytes32(0), address(0), zero, 0);
-        }
+        if (msgCount == 0) revert MailboxIsEmpty();
         Message storage _msg;
         (msgId, _msg) = mailbox.readMessageNextSender();
         sender = _msg.sender;
@@ -125,7 +126,8 @@ contract Mailbox {
      */
     function markMessageRead(bytes32 msgId) external returns (bool moreMessages) {
         UserMailbox storage mailbox = mailboxes[msg.sender];
-        Message storage _msg = mailbox.getMessage(msgId);
+        (bool exists, Message storage _msg) = mailbox.getMessage(msgId);
+        if (!exists) revert MessageNotFound();
         uint256 msgCount = mailbox.countMessagesFrom(_msg.sender);
         emit MailboxUpdated(_msg.sender, msg.sender, msgCount-1, block.timestamp);
         return mailbox.markMessageRead(msgId);

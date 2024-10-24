@@ -41,7 +41,8 @@ describe.only("Mailbox", function () {
     const [owner, otherAccount] = await ethers.getSigners();
 
     const { contract } = await ignition.deploy(mailboxModule);
-    expect(await contract.readMessage(otherAccount)).to.include.members(["0x", 0n]);
+    await expect(contract.readMessage(otherAccount))
+      .to.be.revertedWithCustomError(contract, "MailboxIsEmpty");
   });
 
   it("Should provide a message to a recipient when requested", async function () {
@@ -59,16 +60,16 @@ describe.only("Mailbox", function () {
       .withArgs(sender, recipient, 1, anyValue);
 
     expect(await callAsRecipient.readMessage(sender)).to.include.members([msg]);
-    expect(await callAsSomeoutNoMessages.readMessage(sender)).to.include.members(["0x", 0n]);
-    expect(await callAsRecipient.readMessage(someoneNoMessages)).to.include.members(["0x", 0n]);
+    await expect(callAsSomeoutNoMessages.readMessage(sender))
+      .to.be.revertedWithCustomError(callAsSomeoutNoMessages, "MailboxIsEmpty");
+    await expect(callAsRecipient.readMessage(someoneNoMessages))
+      .to.be.revertedWithCustomError(callAsRecipient, "MailboxIsEmpty");
   });
 
   it("Should allow writing messages until per dialog limit is reached (sender<->recipient)", async function () {
     const {contract, sender, recipient, maxMsgCount} = await loadFixture(deployContractFixture);
 
     const callAsSender = contract.connect(sender);
-    const callAsRecipient = contract.connect(recipient);
-    
     for(let msgIndex=0; msgIndex < maxMsgCount; ++msgIndex) {
       const msg = "0x" + Number(128+msgIndex).toString(16)
       await expect(callAsSender.writeMessage(msg, recipient))
@@ -103,7 +104,11 @@ describe.only("Mailbox", function () {
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(sender, recipient, 0, anyValue);
 
-    expect(await callAsRecipient.readMessage(sender)).to.include.members(["0x", 0n]);
+    // verify no messages left
+    await expect(callAsRecipient.readMessage(sender))
+      .to.be.revertedWithCustomError(callAsRecipient, "MailboxIsEmpty");
+    await expect(callAsRecipient.markMessageRead(result.getValue("msgId")))
+      .to.be.revertedWithCustomError(callAsRecipient, "MessageNotFound");
   });
 
   it("Should allow writing new messages once pending message is read", async function () {
@@ -120,7 +125,8 @@ describe.only("Mailbox", function () {
     }
     
     // verify mailbox empty
-    expect(await callAsRecipient.readMessage(sender)).to.include.members(["0x", 0n]);
+    await expect(callAsRecipient.readMessage(sender))
+      .to.be.revertedWithCustomError(callAsRecipient, "MailboxIsEmpty");
     
     // check new messages can be added
     let newMessages = messages.slice(2);
@@ -170,7 +176,8 @@ describe.only("Mailbox", function () {
       .withArgs(sender, recipient, 0, anyValue);
     }
 
-    expect(await callAsRecipient.readMessageNextSender()).to.include.members(["0x", 0n]);
+    await expect(callAsRecipient.readMessageNextSender())
+      .to.be.revertedWithCustomError(callAsRecipient, "MailboxIsEmpty");
   });
 
   it("Should allow writing/reading anonymous messages", async function () {
@@ -180,26 +187,44 @@ describe.only("Mailbox", function () {
     const callAsRecipient = contract.connect(recipient);
     const anonSender = ethers.ZeroAddress;
     
-    const msg = "0xaa"
+    const firstMsg = "0xaa"
+    const secondMsg = "0xaa"
 
-    await expect(callAsSender.writeMessageAnonymous(msg, recipient))
+    await expect(callAsSender.writeMessageAnonymous(firstMsg, recipient))
     .to.emit(callAsSender, "MailboxUpdated")
+      .withArgs(anonSender, recipient, 1, anyValue);
+    await expect(callAsSender.writeMessageAnonymous(secondMsg, recipient))
+    .to.emit(callAsSender, "MailboxUpdated")
+      .withArgs(anonSender, recipient, 2, anyValue);
+
+    // read anon msg by specifynig anon sender explicitly
+    result = await callAsRecipient.readMessage(anonSender);
+    expect(result.getValue("data")).to.be.equal(firstMsg);
+
+    // read anon message omiting a sender
+    result = await callAsRecipient.readMessageNextSender();
+    expect(result.getValue("data")).to.be.equal(firstMsg);
+
+    await expect(callAsRecipient.markMessageRead(result.getValue("msgId")))
+      .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(anonSender, recipient, 1, anyValue);
 
     // read anon msg by specifynig anon sender explicitly
     result = await callAsRecipient.readMessage(anonSender);
-    expect(result.getValue("data")).to.be.equal(msg);
+    expect(result.getValue("data")).to.be.equal(secondMsg);
 
     // read anon message omiting a sender
     result = await callAsRecipient.readMessageNextSender();
-    expect(result.getValue("data")).to.be.equal(msg);
+    expect(result.getValue("data")).to.be.equal(secondMsg);
 
     await expect(callAsRecipient.markMessageRead(result.getValue("msgId")))
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(anonSender, recipient, 0, anyValue);
 
     // check no messages after marking the only msg as read
-    expect(await callAsRecipient.readMessage(anonSender)).to.include.members(["0x", 0n]);
-    expect(await callAsRecipient.readMessageNextSender()).to.include.members(["0x", 0n]);
+    await expect(callAsRecipient.readMessage(anonSender))
+      .to.be.revertedWithCustomError(callAsRecipient, "MailboxIsEmpty");
+    await expect(callAsRecipient.readMessageNextSender())
+      .to.be.revertedWithCustomError(callAsRecipient, "MailboxIsEmpty");
   });
 });
