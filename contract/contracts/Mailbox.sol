@@ -18,7 +18,7 @@ contract Mailbox {
     uint256 constant public MAX_MESSAGES_PER_MAILBOX = 10;
 
     /// @dev used to calculate a fee payed to the Contract for a message
-    uint32 constant public MSG_FLOOR_FEE = 1000;
+    uint constant public MSG_FLOOR_FEE = 100000 gwei;
     uint32 constant public MSG_FLOOR_FEE_MOD = 140;
     
     /// @notice Emitted when mailbox message count changes, new message arrival or message marked as read
