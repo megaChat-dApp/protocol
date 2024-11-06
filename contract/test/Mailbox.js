@@ -7,6 +7,18 @@ const { expect } = require("chai");
 
 const mailboxModule = require("../ignition/modules/Mailbox");
 
+function* createMsgGen(msgSizeBytes) {
+  const oneByte = 8;
+  const hexDigitsPerByte = 2;
+  const byteStrLen = msgSizeBytes*hexDigitsPerByte;
+  const maxVal = 1<<(oneByte*msgSizeBytes);
+  for(let i = 0; i < maxVal; ++i) {
+    hexNum = i.toString(16);
+    msgPadded = hexNum.padStart(byteStrLen, "0");
+    yield "0x" + msgPadded;
+  }
+}
+
 describe("Mailbox", function () {
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
@@ -28,9 +40,11 @@ describe("Mailbox", function () {
 
   async function deployContractFullMailboxFixture() {
     const {contract, sender, recipient, otherAccounts, maxMsgCount, defaultPayment} = await loadFixture(deployContractFixture);
-    const messages = []
+    const messages = [];
+    const oneByteMsgGen = createMsgGen(1);
     for(let i=0; i < maxMsgCount; ++i) {
-      const msg = "0x" + Number(128+i).toString(16)
+      const msg = oneByteMsgGen.next().value;
+      
       await expect(contract.writeMessage(msg, recipient))
       .to.emit(contract, "MailboxUpdated")
         .withArgs(sender, recipient, i+1, anyValue);
@@ -73,8 +87,9 @@ describe("Mailbox", function () {
     const {contract, sender, recipient, maxMsgCount} = await loadFixture(deployContractFixture);
 
     const callAsSender = contract.connect(sender);
+    const oneByteMsgGen = createMsgGen(1);
     for(let msgIndex=0; msgIndex < maxMsgCount; ++msgIndex) {
-      const msg = "0x" + Number(128+msgIndex).toString(16)
+      const msg = oneByteMsgGen.next().value;
       await expect(callAsSender.writeMessage(msg, recipient))
       .to.emit(callAsSender, "MailboxUpdated")
         .withArgs(sender, recipient, msgIndex+1, anyValue);
@@ -160,7 +175,7 @@ describe("Mailbox", function () {
 
     const senders = otherAccounts;
     const callAsRecipient = contract.connect(recipient);
-    const msg = "0xaa"
+    const msg = "0xaa";
     
     for(let sender of senders) {
       const callAsSender = contract.connect(sender);
@@ -188,8 +203,9 @@ describe("Mailbox", function () {
     const callAsSender = contract.connect(sender);
     const callAsRecipient = contract.connect(recipient);
     const anonSender = ethers.ZeroAddress;
-    const firstMsg = "0xaa"
-    const secondMsg = "0xaa"
+    const oneByteMsgGen = createMsgGen(1);
+    const firstMsg = oneByteMsgGen.next().value;
+    const secondMsg = oneByteMsgGen.next().value;
 
     await expect(callAsSender.writeMessageAnonymous(firstMsg, recipient))
     .to.emit(callAsSender, "MailboxUpdated")
@@ -238,7 +254,8 @@ describe("Mailbox", function () {
     const msgSizeMod = await callAsRecipient.MSG_FLOOR_FEE_MOD();
 
     const msgSize = msgSizeMod*4n;
-    const bigMsg = "0x" + "aa".repeat(Number(msgSize));
+    const bigMsgGen = createMsgGen(Number(msgSize));
+    const bigMsg = bigMsgGen.next().value;
 
     const actualPrice = baseFee*(msgSize/msgSizeMod);
     const paymentBelowBase = {value: baseFee-1n};
