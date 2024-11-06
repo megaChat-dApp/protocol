@@ -16,6 +16,10 @@ contract Mailbox {
 
     /// @dev Max number of messages allowed for a single Mailbox (sender,recipient)
     uint256 constant public MAX_MESSAGES_PER_MAILBOX = 10;
+
+    /// @dev used to calculate a fee payed to the Contract for a message
+    uint constant public MSG_FLOOR_FEE = 100000 gwei;
+    uint32 constant public MSG_FLOOR_FEE_MOD = 140;
     
     /// @notice Emitted when mailbox message count changes, new message arrival or message marked as read
     /// @param sender The address of the message sender
@@ -32,6 +36,9 @@ contract Mailbox {
 
     /// @notice Raised on failure to find the requested message
     error MessageNotFound();
+
+    /// @notice Raised when insufficiend price was paid for an operation 
+    error PriceViolation(uint256 calculatedPrice);
 
     using UserMailboxInterface for UserMailbox;
 
@@ -124,12 +131,22 @@ contract Mailbox {
      * @param msgId ID of the read message
      * @return moreMessages whether other message available from the same sender
      */
-    function markMessageRead(bytes32 msgId) external returns (bool moreMessages) {
+    function markMessageRead(bytes32 msgId) external payable returns (bool moreMessages) {
         UserMailbox storage mailbox = mailboxes[msg.sender];
         (bool exists, Message storage _msg) = mailbox.getMessage(msgId);
         if (!exists) revert MessageNotFound();
+        _check_price(_msg);
+
         uint256 msgCount = mailbox.countMessagesFrom(_msg.sender);
         emit MailboxUpdated(_msg.sender, msg.sender, msgCount-1, block.timestamp);
         return mailbox.markMessageRead(msgId);
+    }
+
+    function _check_price(Message memory _msg) view internal {
+        uint price = MSG_FLOOR_FEE;
+        if (_msg.data.length > MSG_FLOOR_FEE_MOD) {
+            price = MSG_FLOOR_FEE * (_msg.data.length / MSG_FLOOR_FEE_MOD);
+        }
+        if (msg.value < price) revert PriceViolation(price);
     }
 }
