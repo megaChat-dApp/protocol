@@ -8,6 +8,7 @@ const { expect } = require("chai");
 const mailboxModule = require("../ignition/modules/Mailbox");
 
 describe("Mailbox", function () {
+  const DEFAULT_PAYMENT = {value: 99999};
   // We define a fixture to reuse the same setup in every test.
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshot in every test.
@@ -85,7 +86,6 @@ describe("Mailbox", function () {
     
     const callAsRecipient = contract.connect(recipient);
     let msgIndex=0
-    const payment = {value: 99999};
     for(; msgIndex < messages.length-1; ++msgIndex) {
       result = await callAsRecipient.readMessage(sender);
       expect(result.getValue("data")).to.be.equal(messages[msgIndex]);
@@ -94,14 +94,14 @@ describe("Mailbox", function () {
       expect(result.getValue("data")).to.be.equal(messages[msgIndex]);
 
       let expRemainingMsgCount = messages.length-msgIndex-1;
-      await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), payment))
+      await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), DEFAULT_PAYMENT))
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(sender, recipient, expRemainingMsgCount, anyValue);
     }
     result = await callAsRecipient.readMessage(sender);
     expect(result.getValue("data")).to.be.equal(messages[msgIndex]);
 
-    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), payment))
+    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), DEFAULT_PAYMENT))
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(sender, recipient, 0, anyValue);
 
@@ -117,12 +117,11 @@ describe("Mailbox", function () {
     
     const callAsSender = contract.connect(sender);
     const callAsRecipient = contract.connect(recipient);
-    const payment = {value: 99999};
     
     // read all messages
     for(let msgIndex=0; msgIndex < messages.length; ++msgIndex) {
       result = await callAsRecipient.readMessage(sender);
-      tx = await callAsRecipient.markMessageRead(result.getValue("msgId"), payment);
+      tx = await callAsRecipient.markMessageRead(result.getValue("msgId"), DEFAULT_PAYMENT);
       await tx.wait();
     }
     
@@ -143,13 +142,13 @@ describe("Mailbox", function () {
     // check new messages can be read
     result = await callAsRecipient.readMessage(sender);
     expect(result.getValue("data")).to.be.equal(newMessages[0]);
-    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), payment))
+    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), DEFAULT_PAYMENT))
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(sender, recipient, messagesCount-1, anyValue);
 
     result = await callAsRecipient.readMessage(sender);
     expect(result.getValue("data")).to.be.equal(newMessages[1]);
-    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), payment))
+    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), DEFAULT_PAYMENT))
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(sender, recipient, messagesCount-2, anyValue);    
   });
@@ -159,7 +158,6 @@ describe("Mailbox", function () {
 
     const senders = otherAccounts;
     const callAsRecipient = contract.connect(recipient);
-    const payment = {value: 99999};
     const msg = "0xaa"
     
     for(let sender of senders) {
@@ -173,7 +171,7 @@ describe("Mailbox", function () {
       result = await callAsRecipient.readMessageNextSender();
       expect(result.getValue("data")).to.be.equal(msg);
 
-      await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), payment))
+      await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), DEFAULT_PAYMENT))
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(sender, recipient, 0, anyValue);
     }
@@ -188,7 +186,6 @@ describe("Mailbox", function () {
     const callAsSender = contract.connect(sender);
     const callAsRecipient = contract.connect(recipient);
     const anonSender = ethers.ZeroAddress;
-    const payment = {value: 99999};
     const firstMsg = "0xaa"
     const secondMsg = "0xaa"
 
@@ -207,7 +204,7 @@ describe("Mailbox", function () {
     result = await callAsRecipient.readMessageNextSender();
     expect(result.getValue("data")).to.be.equal(firstMsg);
 
-    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), payment))
+    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), DEFAULT_PAYMENT))
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(anonSender, recipient, 1, anyValue);
 
@@ -219,7 +216,7 @@ describe("Mailbox", function () {
     result = await callAsRecipient.readMessageNextSender();
     expect(result.getValue("data")).to.be.equal(secondMsg);
 
-    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), payment))
+    await expect(callAsRecipient.markMessageRead(result.getValue("msgId"), DEFAULT_PAYMENT))
       .to.emit(callAsRecipient, "MailboxUpdated")
       .withArgs(anonSender, recipient, 0, anyValue);
 
